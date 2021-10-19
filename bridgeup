@@ -1,32 +1,93 @@
 #! /bin/bash
 
-# if [ "$EUID" -ne 0 ]; then
-#	echo "Please run as root"
-#	exit
-# fi
+# TODO check for wireless vs wired and act accordingly
+# note: this program assumes wired interface right.
+# will not work if $IFACE is a wireless netork adapter
 
-VAR="eth0"
-GATEWAY=$(ip route | grep '^default' | awk -v var="/$VAR/" 'var {print $3}')
-ADDRESS=$(ip address | grep "$VAR" | awk '/inet/ {print $2}')
 
-sudo modprobe tun tab
+# prompt & continue if user answers y, yes, or just hits enter
+continuePromptYes(){
+	if [[ ! -z ${1+x} ]]; then
+		question=${1}
+	else
+		question="Continue"
+	fi
+	while true; do
+		read -r -p "${question} [Y/n]: " response
+		response=${response,,}    # tolower
+		if [[ "$response" =~ ^(yes|y)$ ]] || [ -z "$response" ]; then
+			# echo "YES"
+			break
+		elif [[ "$response" =~ ^(no|n)$ ]]; then
+			echo "exiting ${BASH_SOURCE[0]}"
+			exit 0
+		fi
+	done
+}
+
+
+# get a list of all the interfaces on the system
+iface_array=()
+for iface in $(ip addr show | cut -d ' ' -f2 | tr ':' '\n' | awk NF); do
+	if [ "$iface" != "lo" ]; then
+		iface_array+=("$iface")
+	fi
+done
+# echo ${iface_array[@]}
+
+
+# save ip route to google's nameserver to ROUTE, don't print error messages
+ROUTE=$(ip route get 8.8.8.8 2>/dev/null)
+# check for network connectivity
+if [[ ! ${ROUTE} ]]; then
+	# no network connectivity
+	continuePromptYes "No network connectivity:  Make bridge anyway?"
+	IFACE="eth0"
+else
+	# we have network connectivity!
+	# test each network interface to find out if it was used for network traffic
+	for iface in ${iface_array[@]}; do
+		# if network traffic used this iface save it to IFACE
+		if echo $ROUTE | grep $iface &> /dev/null; then
+			IFACE=$iface
+		fi
+	done
+fi
+GATEWAY=$(ip route | grep '^default' | awk -v var="/$IFACE/" 'var {print $3}')
+ADDRESS=$(ip address | grep "$IFACE" | awk '/inet/ {print $2}')
+
+
+# REMOVE -- for test purposes only
+IFACE="eth0"
+
+
 # if br0 does not exist create it
-if ! $(ip a | grep br0 &> /dev/null); then
+if [[ ! $(ip addr show | grep br0 &> /dev/null) ]]; then
 	echo "Create br0"
 	sudo ip link add br0 type bridge
 fi
+
+
 # taps are handled in launch qemu vm script
 # sudo ip tuntap add dev tap0 mode tap
 # sudo ip link set dev tap0 master br0
-if ! $(ip a | grep "master br0" | grep eth0 &> /dev/null); then
-	echo "Set eth0 as master to br0"
-	sudo ip link set dev eth0 master br0
+
+# check if $IFACE is already master to br0 if it isn't...
+if ! $(ip a | grep "master br0" | grep ${IFACE} &> /dev/null); then
+	# set $IFACE as master to bridge br0
+	echo "Set ${IFACE} as master to br0"
+	sudo ip link set dev ${IFACE} master br0
 fi
+
+
+# bring up bridge
 sudo ip link set dev br0 up
 
-sudo ip address delete $ADDRESS dev eth0
+# give the new bridge the address of $IFACE
+sudo ip address delete $ADDRESS dev ${IFACE}
 sudo ip address add $ADDRESS dev br0
 sudo ip route add default via $GATEWAY dev br0
 
-# after vm is started set tap1 up
-# sudo ip link set dev tap1 up
+# TODO decide if we should destroy the bridge
+# for now here is the command:
+# sudo ip link delete br0 type bridge
