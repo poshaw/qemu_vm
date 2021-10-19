@@ -1,0 +1,32 @@
+#! /bin/bash
+
+# if [ "$EUID" -ne 0 ]; then
+#	echo "Please run as root"
+#	exit
+# fi
+
+VAR="eth0"
+GATEWAY=$(ip route | grep '^default' | awk -v var="/$VAR/" 'var {print $3}')
+ADDRESS=$(ip address | grep "$VAR" | awk '/inet/ {print $2}')
+
+sudo modprobe tun tab
+# if br0 does not exist create it
+if ! $(ip a | grep br0 &> /dev/null); then
+	echo "Create br0"
+	sudo ip link add br0 type bridge
+fi
+# taps are handled in launch qemu vm script
+# sudo ip tuntap add dev tap0 mode tap
+# sudo ip link set dev tap0 master br0
+if ! $(ip a | grep "master br0" | grep eth0 &> /dev/null); then
+	echo "Set eth0 as master to br0"
+	sudo ip link set dev eth0 master br0
+fi
+sudo ip link set dev br0 up
+
+sudo ip address delete $ADDRESS dev eth0
+sudo ip address add $ADDRESS dev br0
+sudo ip route add default via $GATEWAY dev br0
+
+# after vm is started set tap1 up
+# sudo ip link set dev tap1 up
