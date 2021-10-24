@@ -3,24 +3,33 @@
 # if the iso is in this folder use this
 iso=`ls | grep --color=never "iso$"`
 
+
+read -d '' audio << EOF
+-audiodev alsa,id=snd0 \
+-device sb16,audiodev=snd0 \
+-device ES1370,audiodev=snd0 \
+-device AC97,audiodev=snd0 \
+-device adlib,audiodev=snd0 \
+-device gus,audiodev=snd0 \
+-device cs4231a,audiodev=snd0 \
+-device intel-hda -device hda-duplex,audiodev=snd0
+EOF
+
+# MACADDR="52:54:00:00:00:01"
+MACADDR="52:54:00:00:00:01"
+
 qemu-system-x86_64 \
 	-m 12G \
 	-boot d \
 	-enable-kvm \
 	-cpu host \
 	-smp 2 \
-	-net nic \
+	-net nic,macaddr=$MACADDR \
 	-net user,hostfwd=tcp::2222-:22 \
-	-audiodev alsa,id=snd0 \
-	-device sb16,audiodev=snd0 \
-	-device ES1370,audiodev=snd0 \
-	-device AC97,audiodev=snd0 \
-	-device adlib,audiodev=snd0 \
-	-device gus,audiodev=snd0 \
-	-device cs4231a,audiodev=snd0 \
-	-device intel-hda -device hda-duplex,audiodev=snd0 \
+	$(echo ${audio}) \
 	-vga virtio -display sdl,gl=on \
 	-drive file=${iso},index=0,media=cdrom,readonly=on \
-	-drive format=raw,file=disk.img,index=1,if=virtio \
+	-drive format=qcow2,file=disk.cow,index=1,if=virtio \
 	-drive if=pflash,format=raw,readonly=on,file=/usr/share/edk2-ovmf/x64/OVMF_CODE.fd \
-	-drive if=pflash,format=raw,file=uefi_vars.fd
+	-drive if=pflash,format=raw,file=uefi_vars.fd \
+	
