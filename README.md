@@ -23,7 +23,6 @@ HOME
 ## Create a new virtual machine
 ```bash
 $ vm -c Linux
-$ ln -sf ~/Downloads/iso/linux.iso ~/virtual-machines/Linux/
 ```
 
 ## Directory structure after creation

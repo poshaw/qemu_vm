@@ -88,7 +88,7 @@ if [ "$#" -gt 0 ]; then
 	echo "          If you continue your current virtual-disk will be pemanenetly destroyed."
 	echo "          This will reset this virtual-machine to a blank state ready for new installation"
 	continuePromptNo "Continue?"
-	rm *.iso *.cow uefi_vars.fd
+	rm *.cow uefi_vars.fd
 fi
 
 # create the main disk
