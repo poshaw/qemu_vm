@@ -2,6 +2,7 @@
 
 # note: this program is currently only working for wired connections
 
+
 # prompt & continue if user answers y, yes, or just hits enter
 continuePromptYes(){
 	if [[ ! -z ${1+x} ]]; then
@@ -21,6 +22,7 @@ continuePromptYes(){
 		fi
 	done
 }
+
 
 # test if wired or wireless connection
 if tail -n+3 /proc/net/wireless | grep -q .; then
