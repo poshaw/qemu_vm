@@ -1,10 +1,15 @@
 #!/bin/bash
 
-# get the latest iso
 # for arch, this pulls the latest iso
 # curl http://www.gtlib.gatech.edu/pub/archlinux/iso/latest/ | awk {'print $6'} | awk -F'"' '{for(i=2;i<=NF;i+=2) print $i}' | grep --color=never "iso$" | while read file; do curl -fLO http://www.gtlib.gatech.edu/pub/archlinux/iso/latest/$file; done
 
+
+dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+isodir="${HOME}/dl/iso"
+
+
 continuePromptNo(){
+	# helper function that exits if user ansers no
 	if [[ ! -z ${1+x} ]]; then
 		question=${1}
 	else
@@ -24,8 +29,58 @@ continuePromptNo(){
 	done
 }
 
+
+setISO(){
+	# helper function that links .iso
+	read -e -p "Enter .iso path for install: " -i "${isodir}/" isofile
+	# check that entered value exists
+	shopt -s nullglob
+	set -- ${isofile}
+	if [ "$#" -gt 0 ]; then
+		ln -sf ${isofile} .
+	fi
+}
+
+
+# set up .iso for this virtual machine
+# check if curdir already has .iso file
+shopt -s nullglob
+set -- ${dir}/*.iso
+if [ "$#" -gt 0 ]; then
+	# .iso already exists in file
+	while true; do
+		read -r -p "Found .iso in the current directory.
+Use $(ls --color=never *.iso) for new vm installation? [Y/n]: " response
+		response=${response,,}    # tolower
+		if [[ "$response" =~ ^(yes|y)$ ]] || [ -z "$response" ]; then
+			# use .iso in current directory
+			break
+		elif [[ "$response" =~ ^(no|n)$ ]]; then
+			# found iso in current directory that we don't want to use
+			for file in *.iso; do
+				mv "$file" "${file%.iso}.iso_bak"
+			done
+			# link new .iso
+			setISO
+			break
+		fi
+	done
+else
+	# no .iso found in curdir, so link one
+	setISO
+fi
+
+# now check that there is a .iso file here
+shopt -s nullglob
+set -- ${dir}/*.iso
+if [ "$#" -gt 0 ]; then
+	echo "Using: $(ls --color=never *.iso)"
+else
+	echo "WARNING: .iso file is not set, please manually create link"
+fi
+
+
 # if machine is already set up confirm re-initialize 
-dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 shopt -s nullglob
 set -- ${dir}/*.cow
 if [ "$#" -gt 0 ]; then
@@ -33,7 +88,7 @@ if [ "$#" -gt 0 ]; then
 	echo "          If you continue your current virtual-disk will be pemanenetly destroyed."
 	echo "          This will reset this virtual-machine to a blank state ready for new installation"
 	continuePromptNo "Continue?"
-	rm *.cow uefi_vars.fd
+	rm *.iso *.cow uefi_vars.fd
 fi
 
 # create the main disk
