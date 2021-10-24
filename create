@@ -1,16 +1,48 @@
 #!/bin/bash
 
 # get the latest iso
-# fix this for artix
-# curl http://www.gtlib.gatech.edu/pub/archlinux/iso/latest/ | awk {'print $6'} | awk -F'"' '{for(i=2;i<=NF;i+=2) print $i}' | grep --color=never "iso$" | while read file; do curl -O http://www.gtlib.gatech.edu/pub/archlinux/iso/latest/$file; done
+# for arch, this pulls the latest iso
+# curl http://www.gtlib.gatech.edu/pub/archlinux/iso/latest/ | awk {'print $6'} | awk -F'"' '{for(i=2;i<=NF;i+=2) print $i}' | grep --color=never "iso$" | while read file; do curl -fLO http://www.gtlib.gatech.edu/pub/archlinux/iso/latest/$file; done
+
+continuePromptNo(){
+	if [[ ! -z ${1+x} ]]; then
+		question=${1}
+	else
+		question="Continue"
+	fi
+	while true; do
+		read -r -p "${question} [y/N]: " response
+		response=${response,,}    # tolower
+		# printf "%q\n" "$response"
+		if [[ "$response" =~ ^(yes|y)$ ]]; then
+			# echo "YES"
+			break
+		elif [[ "$response" =~ ^(no|n)$ ]] || [ -z "$response" ]; then
+			# echo "NO"
+			exit 0
+		fi
+	done
+}
+
+# if machine is already set up confirm re-initialize 
+dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+shopt -s nullglob
+set -- ${dir}/*.cow
+if [ "$#" -gt 0 ]; then
+	echo "Warning:  virtual-disk already created!\n"
+	echo "          If you continue your current virtual-disk will be pemanenetly destroyed."
+	echo "          This will reset this virtual-machine to a blank state ready for new installation"
+	continuePromptNo "Continue?"
+	rm *.cow uefi_vars.fd
+fi
 
 # create the main disk
-qemu-img create -f raw disk.img 20G
+qemu-img create -f qcow2 disk.cow 20G
 
-# # create any additional disks
-# for i in {1..3}
-# 	do qemu-img create -f raw -o preallocation=full disk${i}.img 8G
-# done
+# set nic mac address for this machine
+printf -v macaddr "52:54:%02x:%02x:%02x:%02x" $(( $RANDOM & 0xff)) $(( $RANDOM & 0xff )) $(( $RANDOM & 0xff)) $(( $RANDOM & 0xff ))
+sed -i "/^MACADDR=/s/..\:..\:..\:..\:..\:../${macaddr}/" install
+sed -i "/^MACADDR=/s/..\:..\:..\:..\:..\:../${macaddr}/" run
 
 # copy uefi vars to local folder
 cp /usr/share/edk2-ovmf/x64/OVMF_VARS.fd uefi_vars.fd
