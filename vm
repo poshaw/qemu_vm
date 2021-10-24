@@ -1,227 +1,81 @@
 #! /bin/bash
 
-# ssh port for host to ssh into guest
-# $ ssh -P2222 user@localhost
-port=2222
+
+vmdir="${HOME}/vm"
 
 
 usage() {
-	echo "Usage: $0 [option] vm-directory" 1>&2
+	echo "Usage: $0 [option] VM-NAME" 1>&2
 	echo -e "\noptions:" 1>&2
 	echo -e "[ -h ] :
 \tprint help" 1>&2
-	echo -e "[ -a VM_NAME ] :
-\tarchive virtual machine" 1>&2
+	echo -e "[ -n VM_NAME ] :
+\tmake a new virtual machine named VM_NAME ex:
+\t$ $0 -n new_virtual_machine
+\tcreates a new vm located at:
+\t${vmdir}/VM-NAME/" 1>&2
 	echo -e "[ -e ARCHIVE ] :
 \textract an archived virtual machine" 1>&2
-	echo -e "[ -i ] :
-\tboot vm from iso located at ${HOME}/dl/iso/<vm>.iso
-\t(where <vm> is last argument given)" 1>&2
-	echo -e "[ -n VM_NAME ] :
-\tmake a new vm named VM_NAME ex:
-\t$ $0 -m new_virtual_machine
-\tcreates a new vm located at:
-\t${HOME}/vm/new_virtual_machine/" 1>&2
-	echo -e "[ -p PORT ] :
-\tspecify port for use by ssh: default is ${port}" 1>&2
-	echo -e "[ -r VM_NAME ] :
-\tremove virtual machine VM_NAME located at ${HOME}/vm/VM_NAME/" 1>&2
-	echo -e "[ -s ] :
-\trun vm with sound enabled." 1>&2
-	echo "" 1>&2
 }
+
 
 exit_abnormal() {
 	usage
 	exit 1
 }
 
+
+makeVM (){
+	# function expects a template.tar.gz to base new VMs from
+	# 
+	newvm=${1}
+	cd ${vmdir}
+	shopt -s nullglob
+	set -- template*.tar.gz
+	if [ "$#" -gt 0 ]; then
+		echo "making vm ${newvm}"
+		rm -rf template/
+		extractVM $(ls -t ${vmdir}/template*tar.gz | head -n1)
+		mv "template" "${newvm}"
+	fi
+	${vmdir}/${newvm}/create
+}
+
+
+extractVM(){
+	# check if archive exists
+	cd ${vmdir}
+	echo "Extracting VM: ${1}"
+	file="$(basename "${1}")"
+	if [[ -f ${vmdir}/${file} ]]; then
+		echo "Found: ${vmdir}/${file}"
+		cd ${vmdir}
+		pv "${file}" | tar xvz
+	fi
+}
+
+
 if [[ $# -lt 1 ]]; then
 	echo "Error: vm name must be provided"
 	exit_abnormal
 fi
 
-continuePromptNo(){
-	if [[ ! -z ${1+x} ]]; then
-		question=${1}
-	else
-		question="Continue"
-	fi
-	while true; do
-		read -r -p "${question}? [y/N]: " response
-		response=${response,,}    # tolower
-		# printf "%q\n" "$response"
-		if [[ "$response" =~ ^(yes|y)$ ]]; then
-			# echo "YES"
-			break
-		elif [[ "$response" =~ ^(no|n)$ ]] || [ -z "$response" ]; then
-			# echo "NO"
-			exit 0
-		fi
-	done
-}
-
-archiveVM (){
-	# check if file exists
-	if [[ -d ${HOME}/vm/${1} ]]; then
-		cd ${HOME}/vm
-		tar cf - ${1} -P | pv -s $(du -sb ${1} | awk '{print $1}') | gzip > "${1}_$(date +'%Y%m%d_%H%M').tar.gz"
-	else
-		echo "Error: \"${HOME}/vm/${1}\" not found"
-		exit_abnormal
-	fi
-	
-	exit 0
-}
-
-extractVM (){
-	# check if archive exists
-	if [[ -f ${HOME}/vm/${1} ]]; then
-		cd ${HOME}/vm
-		pv ${1} | tar xvz
-	fi
-
-	exit 0
-}
-
-makeVM (){
-	if [[ ! -d ${HOME}/vm ]]; then
-	  mkdir ${HOME}/vm
-	fi
-
-	# check if vm already exists
-	if [[ -d ${HOME}/vm/${1} ]]; then
-		continuePromptNo "${HOME}/vm/${1} already exists:  Overwrite?"
-		rm -rf ${HOME}/vm/${1}
-	fi
-
-	mkdir ${HOME}/vm/${1}
-
-	qemu-img create -f raw ${HOME}/vm/${1}/disk.img 20G
-
-	cp /usr/share/edk2-ovmf/x64/OVMF_VARS.fd ${HOME}/vm/${1}/uefi_vars.fd
-
-	exit 0
-}
-
-removeVM (){
-	if [[ -d ${HOME}/vm/${1} ]]; then
-		rm -rf ${HOME}/vm/${1}
-	else
-		echo "Error: \"${HOME}/vm/${1}\" not found"
-		exit_abnormal
-	fi
-
-	exit 0
-}
-
-# vm = last argument given
-vm="${@: -1}"
-
-while getopts 'a:e:hin:p:r:s' option; do
+while getopts 'hn:e:' option; do
 	case "${option}" in
-		a)
-			archiveVM ${OPTARG}
-			;;
-		e)
-			extractVM ${OPTARG}
-			;;
 		h)
 			usage
-			;;
-		i)
-			iso=${HOME}/dl/iso/${vm}.iso
-			if [ ! -f ${iso} ]; then
-				echo "Error: iso \"${iso}\" is not found"
-				exit_abnormal
-			fi
+			exit 0
 			;;
 		n)
 			makeVM ${OPTARG}
+			exit 0
 			;;
-		p)
-			port=${OPTARG}
-			;;
-		r)
-			removeVM ${OPTARG}
-			;;
-		s)
-			sound="true"
-			;;
-		:)                            # If expected argument omitted:
-			echo "Error: -${OPTARG} requires an argument."
-			exit_abnormal
+		e)
+			extractVM ${OPTARG}
+			exit 0
 			;;
 		*)                            # If unknown (any other) option:
 			exit_abnormal
 			;;
 	esac
 done
-
-# default action is to run the vm
-# check if $vm exists
-if [ ! -d ${HOME}/vm/${vm} ]; then
-	echo "Error: vm \"${HOME}/vm/${vm}\" is not found"
-	exit_abnormal
-fi
-
-# if -i option is set user wants to boot from .iso file
-if [[ ! -z ${iso+x} ]]; then
-	# ${iso} is set so run this section
-	# first run boot the .iso
-	qemu-system-x86_64 \
-		-m 8G \
-		-boot d \
-		-enable-kvm \
-		-cpu host \
-		-smp 2 \
-		-net nic -net user \
-		-drive format=raw,file=${HOME}/vm/${vm}/disk.img,index=0,if=virtio \
-		-drive file=${iso},index=2,media=cdrom,readonly \
-		-drive if=pflash,format=raw,readonly,file=/usr/share/edk2-ovmf/x64/OVMF_CODE.fd \
-		-drive if=pflash,format=raw,file=${HOME}/vm/${vm}/uefi_vars.fd
-
-elif [[ ! -z ${sound+x} ]]; then
-	# ${sound} is set so run this section
-	qemu-system-x86_64 \
-		-m 8G \
-		-enable-kvm \
-		-cpu host \
-		-smp 2 \
-		-net nic \
-		-net user,hostfwd=tcp::${port}-:22 \
-		-audiodev alsa,id=snd0 \
-		-device sb16,audiodev=snd0 \
-		-device ES1370,audiodev=snd0 \
-		-device AC97,audiodev=snd0 \
-		-device adlib,audiodev=snd0 \
-		-device gus,audiodev=snd0 \
-		-device cs4231a,audiodev=snd0 \
-		-device intel-hda -device hda-duplex,audiodev=snd0 \
-		-drive format=raw,file=${HOME}/vm/${vm}/disk.img,index=0,if=virtio \
-		-drive if=pflash,format=raw,readonly,file=/usr/share/edk2-ovmf/x64/OVMF_CODE.fd \
-		-drive if=pflash,format=raw,file=${HOME}/vm/${vm}/uefi_vars.fd
-
-# 		# pc speaker allows system beeps etc
-# 		-machine pcspk-audiodev=snd0 \
-
-else
-	# ${iso} is not set so run this section
-	# boot the system
-	if [[ -f ${HOME}/vm/${1}/run ]]; then
-		${HOME}/vm/${1}/run
-	else
-		qemu-system-x86_64 \
-			-m 8G \
-			-enable-kvm \
-			-cpu host \
-			-smp 2 \
-			-net nic \
-			-net user,hostfwd=tcp::${port}-:22 \
-			-drive format=raw,file=${HOME}/vm/${vm}/disk.img,index=0,if=virtio \
-			-drive if=pflash,format=raw,readonly,file=/usr/share/edk2-ovmf/x64/OVMF_CODE.fd \
-			-drive if=pflash,format=raw,file=${HOME}/vm/${vm}/uefi_vars.fd
-	fi
-fi
-
-exit 0

@@ -2,7 +2,7 @@
 
 This is a work in progress.
 
-Goal is to launch VMs from the script "vm"
+Goal is to launch VMs from the script "vm" that is on the $PATH
 
 ## expected directory setup
 ```
@@ -20,7 +20,7 @@ HOME
         └── linux.iso
 ```
 
-## Create a new virtual machine
+## Create a new virtual machine named "Linux"
 ```bash
 $ vm -c Linux
 ```
@@ -36,7 +36,7 @@ HOME
 │   │   ├── create
 │   │   ├── disk.cow
 │   │   ├── install
-│   │   ├── linux.iso -> ${HOME}/XDG_DOWNLOAD_DIR/iso/linux.iso
+│   │   ├── linux.iso -> ${HOME}/Downloads/iso/linux.iso
 │   │   ├── run
 │   │   └── uefi_vars.fd
 │   └── template
