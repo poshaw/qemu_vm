@@ -36,8 +36,9 @@ fi
 
 
 usage() {
+	name="VM-NAME"
 	# Usage message shows available flags and expected arguements 
-	echo "Usage: $0 [option] VM-NAME" 1>&2
+	echo "Usage: $0 [option] ${name}" 1>&2
 	echo -e "\noptions:" 1>&2
 	# -h
 	echo -e "[ -h ] :
@@ -46,13 +47,16 @@ usage() {
 	echo -e "[ -t ] :
 \trun tests" 1>&2
 	# -n
-	echo -e "[ -n VM_NAME ] :
-\tmake a new virtual machine named VM_NAME ex:
-\t$ $0 -n new_virtual_machine
+	echo -e "[ -n ${name} ] :
+\tmake a new virtual machine named ${name} ex:
+\t$ $0 -n ${name}
 \tcreates a new vm located at:
-\t${vmdir}/VM-NAME/" 1>&2
+\t${vmdir}/${name}/" 1>&2
+	# -a
+	echo -e "[ -a ${name} ] :
+\tarchive virtual machine" 1>&2
 	# -e
-	echo -e "[ -e ARCHIVE ] :
+	echo -e "[ -e ARCHIVE.tar.gz ] :
 \textract an archived virtual machine" 1>&2
 }
 
@@ -86,20 +90,64 @@ makeVM(){
 
 testMakeVM(){
 	# function tests makeVM()
-	echo -e "\nTesting: makeVM()"
+	funcName="makeVM()"
+	echo -e "\nTesting: ${funcName}"
 	# change working directory to where this script's location
 	cd "$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 	vmName=testVM
 	rm -rf "${vmdir}/${vmName}"
 	./vm -n ${vmName}
 	if [[ -f ${vmdir}/${vmName}/run ]]; then
-		echo "makeVM() test results: PASS"
+		echo "${funcName} test results: PASS"
 		rval=0
 	else
-		echo "makeVM() test results: FAIL"
+		echo "${funcName} test results: FAIL"
 		rval=1
 	fi
+	# clean up after yourself
 	rm -rf "${vmdir}/${vmName}"
+	return ${rval}
+}
+
+
+archiveVM(){
+	# check if file exists
+	if [[ -d ${HOME}/vm/${1} ]]; then
+		cd ${HOME}/vm
+		tar cf - ${1} -P | pv -s $(du -sb ${1} | awk '{print $1}') | gzip > "${1}_$(date +'%Y%m%d_%H%M').tar.gz"
+	else
+		echo "Error: \"${HOME}/vm/${1}\" not found"
+		exit_abnormal
+	fi
+	exit 0
+}
+
+
+testArchiveVM(){
+	# function tests archiveVM()
+	funcName="archiveVM()"
+	echo -e "\nTesting: ${funcName}"
+	cd "$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+	pre=$(ls -1 ${vmdir}/template*tar.gz | wc -l)
+	# extract template, so we can archive it
+	rm -rf "${vmdir}/template"
+	./vm -e $(ls -t ${vmdir}/template*tar.gz | head -1)
+
+	# archive template
+	./vm -a template
+	post=$(ls -1 ${vmdir}/template*tar.gz | wc -l)
+	if [[ ${post} -gt ${pre} ]]; then
+		echo "${funcName} test results: PASS"
+		rval=0
+	else
+		echo "${funcName} test results: FAIL"
+		rval=1
+	fi
+	# clean up after yourself
+	# delete extracted template folder
+	rm -rf ${vmdir}/template
+	# delete all but newest template.tar.gz
+	ls -t ${vmdir}/template*tar.gz | tail -n +2 | xargs rm --
 	return ${rval}
 }
 
@@ -119,17 +167,19 @@ extractVM(){
 
 testExtractVM(){
 	# function tests extractVM()
-	echo -e "\nTesting: extractVM()"
+	funcName="extractVM()"
+	echo -e "\nTesting: ${funcName}"
 	cd "$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 	rm -rf "${vmdir}/template"
 	./vm -e $(ls -t ${vmdir}/template*tar.gz | head -1)
 	if [[ -f ${vmdir}/template/run ]]; then
-		echo "extractVM() test results: PASS"
+		echo "${funcName} test results: PASS"
 		rval=0
 	else
-		echo "extractVM() test results: FAIL"
+		echo "${funcName} test results: FAIL"
 		rval=1
 	fi
+	# clean up after yourself
 	rm -rf "${vmdir}/template"
 	return ${rval}
 }
@@ -146,6 +196,11 @@ runTests(){
 		exit 1
 	fi
 
+	# test archiveVM()
+	if ! testArchiveVM; then
+		exit 1
+	fi
+
 	# test usage()
 	echo -e "\nTesting: usage()"
 	usage
@@ -159,22 +214,25 @@ fi
 
 
 # parse arguments
-while getopts 'htn:e:' option; do
+while getopts 'a:e:hn:t' option; do
 	case "${option}" in
-		h)
-			usage
+		a)
+			archiveVM ${OPTARG}
+			;;
+		e)
+			extractVM ${OPTARG}
 			exit 0
 			;;
-		t)
-			runTests
+		h)
+			usage
 			exit 0
 			;;
 		n)
 			makeVM ${OPTARG}
 			exit 0
 			;;
-		e)
-			extractVM ${OPTARG}
+		t)
+			runTests
 			exit 0
 			;;
 		*)                         # If unknown (any other) option:
