@@ -35,19 +35,25 @@ setISO(){
 	# helper function that links .iso
 	read -e -p "Enter .iso path for install: " -i "${isodir}/" isofile
 	# check that entered value exists
-	shopt -s nullglob
-	set -- ${isofile}
-	if [ "$#" -gt 0 ]; then
+	if compgen -G "${isofile}" > /dev/null; then
 		ln -sf ${isofile} .
+	fi
+	# check that setISO was successful
+	if compgen -G "${dir}/*.iso" > /dev/null; then
+		echo "Using: $(ls --color=never *.iso)"
+		return 0
+	else
+		echo "WARNING: ISO file not set."
+		echo "         Please include or link an ISO file at the following location:"
+		echo "         ${dir}"
+		return 1
 	fi
 }
 
 
 # set up .iso for this virtual machine
 # check if curdir already has .iso file
-shopt -s nullglob
-set -- ${dir}/*.iso
-if [ "$#" -gt 0 ]; then
+if compgen -G "${dir}/*.iso" > /dev/null; then
 	# .iso already exists in file
 	while true; do
 		read -r -p "Found .iso in the current directory.
@@ -71,20 +77,9 @@ else
 	setISO
 fi
 
-# now check that there is a .iso file here
-shopt -s nullglob
-set -- ${dir}/*.iso
-if [ "$#" -gt 0 ]; then
-	echo "Using: $(ls --color=never *.iso)"
-else
-	echo "WARNING: .iso file is not set, please manually create link"
-fi
-
 
 # if machine is already set up confirm re-initialize 
-shopt -s nullglob
-set -- ${dir}/*.cow
-if [ "$#" -gt 0 ]; then
+if compgen -G "${dir}/*.cow" > /dev/null; then
 	echo "Warning:  virtual-disk already created!\n"
 	echo "          If you continue your current virtual-disk will be pemanenetly destroyed."
 	echo "          This will reset this virtual-machine to a blank state ready for new installation"
@@ -92,8 +87,10 @@ if [ "$#" -gt 0 ]; then
 	rm *.cow uefi_vars.fd
 fi
 
+
 # create the main disk
 qemu-img create -f qcow2 disk.cow 20G
+
 
 # set nic mac address for this machine
 printf -v macaddr "52:54:%02x:%02x:%02x:%02x" $(( $RANDOM & 0xff)) $(( $RANDOM & 0xff )) $(( $RANDOM & 0xff)) $(( $RANDOM & 0xff ))
