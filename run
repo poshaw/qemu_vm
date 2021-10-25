@@ -1,34 +1,63 @@
 #!/bin/bash
 
-# dir=${HOME}/vm/zfs
+
+# set $dir to this script's directory
 dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
-USERID=$(whoami)
-precreation=$(ip tuntap list | cut -d: -f1 | sort)
-sudo ip tuntap add user $USERID mode tap
-postcreation=$(ip tuntap list | cut -d: -f1 | sort)
-IFACE=$(comm -13 <(echo "$precreation") <(echo "$postcreation"))
-echo "$IFACE"
-sudo ip link set dev $IFACE master br0
 
 # MACADDR="52:54:00:00:00:01"
 MACADDR="52:54:00:00:00:01"
 
+
+# set up network interface
+bridgeName=br0
+# test if bridge br0 exists
+if ip addr show | grep -E "\<${bridgeName}" > /dev/null; then
+	# bridge $bridgeName is found, so let's use it
+	echo "Found bridge: ${bridgeName}"
+	USERID=$(whoami)
+	precreation=$(ip tuntap list | cut -d: -f1 | sort)
+	sudo ip tuntap add user $USERID mode tap
+	postcreation=$(ip tuntap list | cut -d: -f1 | sort)
+	IFACE=$(comm -13 <(echo "$precreation") <(echo "$postcreation"))
+	echo "$IFACE"
+	sudo ip link set dev $IFACE master br0
+	interface="-net tap,ifname="$IFACE",script=no,downscript=no" 
+else
+	echo "no bridge found, using user-mode networking"
+	interface="-net user,hostfwd=tcp::2222-:22"
+fi
+
+
+# uncomment this section to turn on audio in the VM
+# audio="-audiodev alsa,id=snd0
+# -device sb16,audiodev=snd0
+# -device ES1370,audiodev=snd0
+# -device AC97,audiodev=snd0
+# -device adlib,audiodev=snd0
+# -device gus,audiodev=snd0
+# -device cs4231a,audiodev=snd0
+# -device intel-hda -device hda-duplex,audiodev=snd0"
+
+
+# vm launch command
 qemu-system-x86_64 \
 	-m 8G \
 	-enable-kvm \
 	-cpu host \
 	-smp 2 \
 	-net nic,macaddr=$MACADDR \
-	-net tap,ifname="$IFACE",script=no,downscript=no \
+	${interface} \
+	${audio} \
 	-vga virtio -display gtk,gl=on \
 	-drive format=raw,file=${dir}/disk.img,index=0,if=virtio \
 	-drive if=pflash,format=raw,readonly=on,file=/usr/share/edk2-ovmf/x64/OVMF_CODE.fd \
 	-drive if=pflash,format=raw,file=${dir}/uefi_vars.fd
 
-	# -net user,hostfwd=tcp::2222-:22 \
-	# -net tap,ifname="$IFACE",script=no,downscript=no \
 
-# TODO Remove $IFACE as master to br0
-sudo ip link set dev $IFACE down &> /dev/null
-sudo ip tuntap del $IFACE mode tap &> /dev/null
+if [[ ! -z ${IFACE+x} ]]; then
+	echo "taking down ${IFACE}"
+	sudo ip link set ${IFACE} nomaster
+	sudo ip link set dev ${IFACE} down &> /dev/null
+	sudo ip tuntap del ${IFACE} mode tap &> /dev/null
+fi
