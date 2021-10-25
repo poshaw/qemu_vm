@@ -4,41 +4,103 @@
 vmdir="${HOME}/vm"
 
 
+continuePromptYes(){
+	# helper function that exits script unless user types (y)es
+	if [[ ! -z ${1+x} ]]; then
+		question=${1}
+	else
+		question="Continue?"
+	fi
+	# make sure user inputs a response starting with y or n
+	while true; do
+		read -r -p "${question} [Y/n]: " response
+		response=${response,,}    # tolower
+		if [[ "$response" =~ ^(yes|y)$ ]] || [ -z "$response" ]; then
+			# User wants to continue so break while
+			break
+		elif [[ "$response" =~ ^(no|n)$ ]]; then
+			# User does not want to contiue, so exit
+			echo "exiting ${BASH_SOURCE[0]}"
+			exit 0
+		fi
+	done
+}
+
+
+# test if pv is installed with which
+# we don't need any output from which so supress output to /dev/null
+if ! which pv 2>/dev/null 1>&2; then
+	continuePromptYes "This script needs pv, install it now?"
+	sudo pacman -Syu pv
+fi
+
+
 usage() {
+	# Usage message shows available flags and expected arguements 
 	echo "Usage: $0 [option] VM-NAME" 1>&2
 	echo -e "\noptions:" 1>&2
+	# -h
 	echo -e "[ -h ] :
 \tprint help" 1>&2
+	# -t
+	echo -e "[ -t ] :
+\trun tests" 1>&2
+	# -n
 	echo -e "[ -n VM_NAME ] :
 \tmake a new virtual machine named VM_NAME ex:
 \t$ $0 -n new_virtual_machine
 \tcreates a new vm located at:
 \t${vmdir}/VM-NAME/" 1>&2
+	# -e
 	echo -e "[ -e ARCHIVE ] :
 \textract an archived virtual machine" 1>&2
 }
 
 
 exit_abnormal() {
+	# helper function for non 0 script exit
 	usage
 	exit 1
 }
 
 
-makeVM (){
-	# function expects a template.tar.gz to base new VMs from
-	# 
+makeVM(){
+	# function to create a new virtual machine
+	# function expects a template.tar.gz as a basis for new VMs
 	newvm=${1}
 	cd ${vmdir}
+	# test for file existence with wildcard in filename
 	shopt -s nullglob
 	set -- template*.tar.gz
 	if [ "$#" -gt 0 ]; then
-		echo "making vm ${newvm}"
+		echo "making virtual machine: ${newvm}"
+		# get a new copy of template and change it to newVM
 		rm -rf template/
 		extractVM $(ls -t ${vmdir}/template*tar.gz | head -n1)
 		mv "template" "${newvm}"
 	fi
+	# run create in newVM
 	${vmdir}/${newvm}/create
+}
+
+
+testMakeVM(){
+	# function tests makeVM()
+	echo -e "\nTesting: makeVM()"
+	# change working directory to where this script's location
+	cd "$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+	vmName=testVM
+	rm -rf "${vmdir}/${vmName}"
+	./vm -n ${vmName}
+	if [[ -f ${vmdir}/${vmName}/run ]]; then
+		echo "makeVM() test results: PASS"
+		rval=0
+	else
+		echo "makeVM() test results: FAIL"
+		rval=1
+	fi
+	rm -rf "${vmdir}/${vmName}"
+	return ${rval}
 }
 
 
@@ -47,23 +109,64 @@ extractVM(){
 	cd ${vmdir}
 	echo "Extracting VM: ${1}"
 	file="$(basename "${1}")"
-	if [[ -f ${vmdir}/${file} ]]; then
-		echo "Found: ${vmdir}/${file}"
-		cd ${vmdir}
+	# if [[ -f ${vmdir}/${file} ]]; then
+		# cd ${vmdir}
+	if [[ -f ${file} ]]; then
 		pv "${file}" | tar xvz
 	fi
 }
 
 
+testExtractVM(){
+	# function tests extractVM()
+	echo -e "\nTesting: extractVM()"
+	cd "$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+	rm -rf "${vmdir}/template"
+	./vm -e $(ls -t ${vmdir}/template*tar.gz | head -1)
+	if [[ -f ${vmdir}/template/run ]]; then
+		echo "extractVM() test results: PASS"
+		rval=0
+	else
+		echo "extractVM() test results: FAIL"
+		rval=1
+	fi
+	rm -rf "${vmdir}/template"
+	return ${rval}
+}
+
+
+runTests(){
+	# test extractVM()
+	if ! testExtractVM; then
+		exit 1
+	fi
+
+	# test makeVM()
+	if ! testMakeVM; then
+		exit 1
+	fi
+
+	# test usage()
+	echo -e "\nTesting: usage()"
+	usage
+}
+
+
 if [[ $# -lt 1 ]]; then
-	echo "Error: vm name must be provided"
+	echo "Error: insuficient arguements provided"
 	exit_abnormal
 fi
 
-while getopts 'hn:e:' option; do
+
+# parse arguments
+while getopts 'htn:e:' option; do
 	case "${option}" in
 		h)
 			usage
+			exit 0
+			;;
+		t)
+			runTests
 			exit 0
 			;;
 		n)
@@ -74,7 +177,7 @@ while getopts 'hn:e:' option; do
 			extractVM ${OPTARG}
 			exit 0
 			;;
-		*)                            # If unknown (any other) option:
+		*)                         # If unknown (any other) option:
 			exit_abnormal
 			;;
 	esac
