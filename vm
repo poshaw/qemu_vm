@@ -27,6 +27,27 @@ continuePromptYes(){
 }
 
 
+continuePromptNo(){
+	if [[ ! -z ${1+x} ]]; then
+		question=${1}
+	else
+		question="Continue?"
+	fi
+	while true; do
+		read -r -p "${question} [y/N]: " response
+		response=${response,,}    # tolower
+		# printf "%q\n" "$response"
+		if [[ "$response" =~ ^(yes|y)$ ]]; then
+			# echo "YES"
+			break
+		elif [[ "$response" =~ ^(no|n)$ ]] || [ -z "$response" ]; then
+			# echo "NO"
+			exit 0
+		fi
+	done
+}
+
+
 # test if pv is installed with which
 # we don't need any output from which so supress output to /dev/null
 if ! which pv 2>/dev/null 1>&2; then
@@ -72,16 +93,28 @@ makeVM(){
 	# function to create a new virtual machine
 	# function expects a template.tar.gz as a basis for new VMs
 	newvm=${1}
+	# if vmdir does not exist, create it
+	if [[ ! -d ${vmdir} ]]; then
+	  mkdir -p ${vmdir}
+	fi
 	cd ${vmdir}
+	# check if vm already exists
+	if [[ -d ${vmdir}/${newvm} ]]; then
+		continuePromptNo "${vmdir}/${newvm} already exists:  Overwrite?"
+		rm -rf ${vmdir}/${newvm}
+	fi
+	# check for template.tar.gz
 	# test for file existence with wildcard in filename
-	shopt -s nullglob
-	set -- template*.tar.gz
-	if [ "$#" -gt 0 ]; then
+	if compgen -G "${vmdir}/template*.tar.gz" > /dev/null; then
 		echo "making virtual machine: ${newvm}"
-		# get a new copy of template and change it to newVM
+		# get a new copy of latest template and change it to newVM
 		rm -rf template/
 		extractVM $(ls -t ${vmdir}/template*tar.gz | head -n1)
 		mv "template" "${newvm}"
+	else
+		echo "ERROR: ${vmdir}/template.tar.gz not found"
+		echo "       This file is required as basis for new machines"
+		exit 1
 	fi
 	# run create in newVM
 	${vmdir}/${newvm}/create
@@ -105,6 +138,7 @@ testMakeVM(){
 		rval=1
 	fi
 	# clean up after yourself
+	# remove testVM
 	rm -rf "${vmdir}/${vmName}"
 	return ${rval}
 }
@@ -119,7 +153,7 @@ archiveVM(){
 		echo "Error: \"${HOME}/vm/${1}\" not found"
 		exit_abnormal
 	fi
-	exit 0
+	return 0
 }
 
 
@@ -218,6 +252,7 @@ while getopts 'a:e:hn:t' option; do
 	case "${option}" in
 		a)
 			archiveVM ${OPTARG}
+			exit 0
 			;;
 		e)
 			extractVM ${OPTARG}
