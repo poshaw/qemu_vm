@@ -11,7 +11,7 @@ MACADDR="52:54:00:00:00:01"
 
 # set up network interface
 bridgeName=br0
-# test if bridge br0 exists
+# test if bridge ${bridgeName} exists
 if ip addr show | grep -E "\<${bridgeName}" > /dev/null; then
 	# bridge $bridgeName is found, so let's use it
 	echo "Found bridge: ${bridgeName}"
@@ -20,8 +20,7 @@ if ip addr show | grep -E "\<${bridgeName}" > /dev/null; then
 	sudo ip tuntap add user $USERID mode tap
 	postcreation=$(ip tuntap list | cut -d: -f1 | sort)
 	IFACE=$(comm -13 <(echo "$precreation") <(echo "$postcreation"))
-	echo "$IFACE"
-	sudo ip link set dev $IFACE master br0
+	sudo ip link set dev $IFACE master ${bridgeName}
 	interface="-net tap,ifname="$IFACE",script=no,downscript=no" 
 else
 	echo "no bridge found, using user-mode networking"
