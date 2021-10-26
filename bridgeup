@@ -8,7 +8,7 @@ continuePromptYes(){
 	if [[ ! -z ${1+x} ]]; then
 		question=${1}
 	else
-		question="Continue"
+		question="Continue?"
 	fi
 	while true; do
 		read -r -p "${question} [Y/n]: " response
@@ -33,8 +33,8 @@ if tail -n+3 /proc/net/wireless | grep -q .; then
 
 else
 	printf "Wired Connection\n"
-	
-	
+
+
 	# get a list of all the interfaces on the system
 	iface_array=()
 	for iface in $(ip addr show | cut -d ' ' -f2 | tr ':' '\n' | awk NF); do
@@ -44,8 +44,8 @@ else
 		fi
 	done
 	# echo ${iface_array[@]}
-	
-	
+
+
 	# save ip route to google's nameserver to ROUTE, don't print error messages
 	ROUTE=$(ip route get 8.8.8.8 2>/dev/null)
 	# check for network connectivity
@@ -65,39 +65,36 @@ else
 	fi
 	GATEWAY=$(ip route | grep '^default' | awk -v var="/$IFACE/" 'var {print $3}')
 	ADDRESS=$(ip address | grep "$IFACE" | awk '/inet/ {print $2}')
-	
-	
-	# # REMOVE -- for test purposes only
-	# IFACE="eth0"
-	
-	
+
+
+	bridgeName=br0
 	# if br0 does not exist create it
-	if [[ ! $(ip addr show | grep br0 &> /dev/null) ]]; then
-		echo "Create br0"
-		sudo ip link add br0 type bridge
+	if ! ip addr | grep -E "\<${bridgeName}" > /dev/null; then
+		echo "Creating bridge ${bridgeName}"
+		sudo ip link add ${bridgeName} type bridge
 	fi
-	
-	
+
+
 	# taps are handled in launch qemu vm script
 	# sudo ip tuntap add dev tap0 mode tap
-	# sudo ip link set dev tap0 master br0
+	# sudo ip link set dev tap0 master ${bridgeName}
 
-	
-	# check if $IFACE is already master to br0 if it isn't...
-	if ! $(ip a | grep "master br0" | grep ${IFACE} &> /dev/null); then
-		# set $IFACE as master to bridge br0
-		sudo ip link set dev ${IFACE} master br0
+
+	# check if $IFACE is already master to ${bridgeName} if it isn't...
+	if ip addr | grep "master ${bridgeName}" | grep -E "\<${IFACE}" > /dev/null; then
+		# set $IFACE as master to bridge ${bridgeName}
+		sudo ip link set dev ${IFACE} master ${bridgeName}
 	fi
-	
-	
-	# bring up bridge
-	sudo ip link set dev br0 up
 
-	
+
+	# bring up bridge
+	sudo ip link set dev ${bridgeName} up
+
+
 	# give the new bridge the address of $IFACE
 	sudo ip address delete $ADDRESS dev ${IFACE}
-	sudo ip address add $ADDRESS dev br0
-	sudo ip route add default via $GATEWAY dev br0
+	sudo ip address add $ADDRESS dev ${bridgeName}
+	sudo ip route add default via $GATEWAY dev ${bridgeName}
 fi
 
 
