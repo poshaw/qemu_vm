@@ -2,21 +2,21 @@
 
 # if the iso is in this folder use this
 iso=`ls | grep --color=never "iso$"`
-
-
-read -d '' audio << EOF
--audiodev alsa,id=snd0 \
--device sb16,audiodev=snd0 \
--device ES1370,audiodev=snd0 \
--device AC97,audiodev=snd0 \
--device adlib,audiodev=snd0 \
--device gus,audiodev=snd0 \
--device cs4231a,audiodev=snd0 \
--device intel-hda -device hda-duplex,audiodev=snd0
-EOF
-
+# set $dir to this script's directory
+dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 # MACADDR="52:54:00:00:00:01"
 MACADDR="52:54:00:00:00:01"
+
+# uncomment this section to turn on audio in the VM
+# audio="-audiodev alsa,id=snd0
+# -device sb16,audiodev=snd0
+# -device ES1370,audiodev=snd0
+# -device AC97,audiodev=snd0
+# -device adlib,audiodev=snd0
+# -device gus,audiodev=snd0
+# -device cs4231a,audiodev=snd0
+# -device intel-hda -device hda-duplex,audiodev=snd0"
+
 
 qemu-system-x86_64 \
 	-m 12G \
@@ -26,10 +26,10 @@ qemu-system-x86_64 \
 	-smp 2 \
 	-net nic,macaddr=$MACADDR \
 	-net user,hostfwd=tcp::2222-:22 \
-	$(echo ${audio}) \
+	${audio} \
 	-vga virtio -display sdl,gl=on \
 	-drive file=${iso},index=0,media=cdrom,readonly=on \
 	-drive format=qcow2,file=disk.cow,index=1,if=virtio \
 	-drive if=pflash,format=raw,readonly=on,file=/usr/share/edk2-ovmf/x64/OVMF_CODE.fd \
-	-drive if=pflash,format=raw,file=uefi_vars.fd \
+	-drive if=pflash,format=raw,file=${dir}/uefi_vars.fd
 	
