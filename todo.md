@@ -7,6 +7,6 @@
 # install
 
 # vm
-1. install vm
-2. run vm
+1. -i option -- install vm
+2. set up run vm
 
