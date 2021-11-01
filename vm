@@ -246,6 +246,8 @@ if [[ $# -lt 1 ]]; then
 	exit_abnormal
 fi
 
+# vm = last argument given
+vm="${@: -1}"
 
 # parse arguments
 while getopts 'a:e:hn:t' option; do
@@ -275,3 +277,15 @@ while getopts 'a:e:hn:t' option; do
 			;;
 	esac
 done
+
+# default action is to run the vm
+# check if $vm exists
+if [ ! -d ${vmdir}/${vm} ]; then
+	echo "Error: vm \"${vmdir}/${vm}\" is not found"
+	exit_abnormal
+fi
+
+
+if [[ -f ${vmdir}/${vm}/run ]]; then
+	${vmdir}/${vm}/run
+fi
