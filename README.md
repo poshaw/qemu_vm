@@ -28,7 +28,7 @@ $ vm -c Linux
 ## Directory structure after creation
 ```
 HOME
-├── local
+├── .local
 │   └── bin
 │       └── vm
 ├── virtual-machines
